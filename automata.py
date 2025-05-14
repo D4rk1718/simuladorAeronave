@@ -14,7 +14,7 @@ class Estado(Enum):
 
 # Abreviaturas para los estados
 abbreviations = {
-    "EN_TIERRA": "T",
+    "EN_TIERRA": "T",   
     "DESPEGANDO": "D",
     "EN_VUELO": "V",
     "ATERRIZANDO": "A",
@@ -46,6 +46,57 @@ class AutomataAeronave:
 
 # Configuración de la página de Streamlit
 st.set_page_config(page_title="Simulador de Aeronave", layout="wide")
+
+# CSS personalizado para responsividad
+st.markdown("""
+<style>
+/* Ajustar contenedores para pantallas pequeñas */
+.stApp {
+    max-width: 100%;
+    padding: 1rem;
+}
+
+/* Hacer las columnas apilables en pantallas pequeñas */
+@media (max-width: 768px) {
+    .st-col {
+        flex: 100% !important;
+        max-width: 100% !important;
+        margin-bottom: 1rem;
+    }
+}
+
+/* Ajustar el canvas para que sea responsive */
+#simulacionCanvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 400px;
+}
+
+/* Ajustar el contenedor del DFA */
+div[data-testid="stVerticalBlock"] > div {
+    width: 100% !important;
+}
+
+/* Ajustar el texto y botones para móviles */
+.stButton > button {
+    width: 100%;
+    font-size: 16px;
+}
+.stSelectbox {
+    width: 100%;
+}
+.stMarkdown {
+    font-size: 14px;
+}
+
+/* Ajustar el historial para evitar desbordamiento */
+.historial {
+    max-height: 200px;
+    overflow-y: auto;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Simulador de Aeronave")
 
 # Inicialización del estado persistente
@@ -68,8 +119,8 @@ if 'estado_objetivo' not in st.session_state:
 automata = st.session_state.automata
 automata.estado_actual = Estado(st.session_state.estado_actual)
 
-# Diseño de la interfaz con 3 columnas
-col1, col2, col3 = st.columns([1, 2, 1])
+# Diseño de la interfaz con columnas responsivas
+col1, col2, col3 = st.columns([1, 2, 1], gap="medium")
 
 # Columna 1: Controles de la simulación
 with col1:
@@ -106,6 +157,7 @@ with col1:
         else:
             st.session_state.estado_objetivo = estado_siguiente
             st.error(mensaje)
+
 # Columna 2: Simulación visual
 with col2:
     st.subheader("Simulación")
@@ -119,64 +171,69 @@ with col2:
 
     codigo_estados = ""
     for estado, pos in posiciones.items():
-        # Dibujar nodos con doble círculo para EN_TIERRA (estado terminal)
+        # Escalar posiciones según el tamaño del canvas
+        scale_x = "canvas.width / 600"
+        scale_y = "canvas.height / 450"
+        pos_x = f"{pos[0]} * {scale_x}"
+        pos_y = f"{pos[1]} * {scale_y}"
         if estado == "EN_TIERRA":
             codigo_estados += (
                 "ctx.beginPath();\n"
-                f"ctx.arc({pos[0]}, {pos[1]}, 20, 0, 2 * Math.PI);\n"
+                f"ctx.arc({pos_x}, {pos_y}, 20 * scale, 0, 2 * Math.PI);\n"
                 f"ctx.fillStyle = '{estado}' === '{automata.estado_actual.value}' ? 'green' : 'lightgray';\n"
                 "ctx.fill();\n"
                 "ctx.stroke();\n"
-                # Segundo círculo más pequeño para indicar estado terminal
                 "ctx.beginPath();\n"
-                f"ctx.arc({pos[0]}, {pos[1]}, 23, 0, 2 * Math.PI);\n"
+                f"ctx.arc({pos_x}, {pos_y}, 23 * scale, 0, 2 * Math.PI);\n"
                 "ctx.strokeStyle = 'black';\n"
-                "ctx.lineWidth = 2;\n"
+                "ctx.lineWidth = 2 * scale;\n"
                 "ctx.stroke();\n"
-                "ctx.lineWidth = 1;\n"
+                "ctx.lineWidth = 1 * scale;\n"
                 "ctx.fillStyle = 'black';\n"
-                "ctx.font = '12px Arial';\n"
-                f"ctx.fillText('{estado}', {pos[0] - 30}, {pos[1] - 25});\n"
-                f"ctx.fillText('{abbreviations[estado]}', {pos[0] - 5}, {pos[1] + 5});\n"
+                f"ctx.font = `${{12 * scale}}px Arial`;\n"
+                f"ctx.fillText('{estado}', {pos_x} - (30 * scale), {pos_y} - (25 * scale));\n"
+                f"ctx.fillText('{abbreviations[estado]}', {pos_x} - (5 * scale), {pos_y} + (5 * scale));\n"
             )
         else:
             codigo_estados += (
                 "ctx.beginPath();\n"
-                f"ctx.arc({pos[0]}, {pos[1]}, 20, 0, 2 * Math.PI);\n"
+                f"ctx.arc({pos_x}, {pos_y}, 20 * scale, 0, 2 * Math.PI);\n"
                 f"ctx.fillStyle = '{estado}' === '{automata.estado_actual.value}' ? 'green' : 'lightgray';\n"
                 "ctx.fill();\n"
                 "ctx.stroke();\n"
                 "ctx.fillStyle = 'black';\n"
-                "ctx.font = '12px Arial';\n"
-                f"ctx.fillText('{estado}', {pos[0] - 30}, {pos[1] - 25});\n"
-                f"ctx.fillText('{abbreviations[estado]}', {pos[0] - 5}, {pos[1] + 5});\n"
+                f"ctx.font = `${{12 * scale}}px Arial`;\n"
+                f"ctx.fillText('{estado}', {pos_x} - (30 * scale), {pos_y} - (25 * scale));\n"
+                f"ctx.fillText('{abbreviations[estado]}', {pos_x} - (5 * scale), {pos_y} + (5 * scale));\n"
             )
 
-    # Agregar flecha inicial apuntando a EN_TIERRA
+    # Ajustar flecha inicial
     flecha_inicial = (
         "ctx.beginPath();\n"
-        "ctx.moveTo(70, 400);\n"  # Punto de inicio de la flecha (a la izquierda de EN_TIERRA)
-        "ctx.lineTo(80, 400);\n"  # Punto final cerca del nodo EN_TIERRA
+        f"ctx.moveTo(70 * {scale_x}, 400 * {scale_y});\n"
+        f"ctx.lineTo(80 * {scale_x}, 400 * {scale_y});\n"
         "ctx.strokeStyle = 'black';\n"
-        "ctx.lineWidth = 2;\n"
+        "ctx.lineWidth = 2 * scale;\n"
         "ctx.stroke();\n"
-        # Dibujar punta de flecha
         "ctx.beginPath();\n"
-        "ctx.moveTo(80, 400);\n"
-        "ctx.lineTo(75, 395);\n"
-        "ctx.lineTo(75, 405);\n"
+        f"ctx.moveTo(80 * {scale_x}, 400 * {scale_y});\n"
+        f"ctx.lineTo(75 * {scale_x}, 395 * {scale_y});\n"
+        f"ctx.lineTo(75 * {scale_x}, 405 * {scale_y});\n"
         "ctx.fillStyle = 'black';\n"
         "ctx.fill();\n"
-        "ctx.lineWidth = 1;\n"
+        "ctx.lineWidth = 1 * scale;\n"
     )
 
     js_code = f"""
-    <canvas id="simulacionCanvas" width="600" height="450" style="border:1px solid black;"></canvas>
+    <canvas id="simulacionCanvas" style="width: 100%; max-height: 400px;"></canvas>
     <script>
         const canvas = document.getElementById('simulacionCanvas');
         const ctx = canvas.getContext('2d');
-        let avionX = {posiciones[automata.estado_actual.value][0]};
-        let avionY = {posiciones[automata.estado_actual.value][1]};
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetWidth * (450 / 600);
+        const scale = canvas.width / 600;
+        let avionX = {posiciones[automata.estado_actual.value][0]} * scale;
+        let avionY = {posiciones[automata.estado_actual.value][1]} * scale;
         let objetivoX = avionX;
         let objetivoY = avionY;
         let error = false;
@@ -188,22 +245,22 @@ with col2:
             ctx.fillStyle = 'lightblue';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'gray';
-            ctx.fillRect(0, 350, canvas.width, 100);
+            ctx.fillRect(0, 350 * scale, canvas.width, 100 * scale);
             
             {flecha_inicial}
             {codigo_estados}
 
-            ctx.font = '30px Arial';
-            ctx.fillText('✈️', avionX - 15, avionY + 10);
+            ctx.font = `${{30 * scale}}px Arial`;
+            ctx.fillText('✈️', avionX - (15 * scale), avionY + (10 * scale));
 
             if (error) {{
                 ctx.strokeStyle = 'red';
-                ctx.lineWidth = 5;
+                ctx.lineWidth = 5 * scale;
                 ctx.beginPath();
-                ctx.moveTo(errorX - 20, errorY - 20);
-                ctx.lineTo(errorX + 20, errorY + 20);
-                ctx.moveTo(errorX + 20, errorY - 20);
-                ctx.lineTo(errorX - 20, errorY + 20);
+                ctx.moveTo(errorX - (20 * scale), errorY - (20 * scale));
+                ctx.lineTo(errorX + (20 * scale), errorY + (20 * scale));
+                ctx.moveTo(errorX + (20 * scale), errorY - (20 * scale));
+                ctx.lineTo(errorX - (20 * scale), errorY + (20 * scale));
                 ctx.stroke();
             }}
 
@@ -217,32 +274,44 @@ with col2:
         function actualizarPosicion(estadoObjetivo, hayError) {{
             if (hayError) {{
                 error = true;
-                errorX = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[0]};
-                errorY = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[1]};
+                errorX = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[0]} * scale;
+                errorY = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[1]} * scale;
                 setTimeout(() => {{ error = false; dibujar(); }}, 1000);
             }} else {{
-                error = false;
-                objetivoX = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[0]};
-                objetivoY = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[1]};
+                HAVError = false;
+                objetivoX = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[0]} * scale;
+                objetivoY = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[1]} * scale;
             }}
             requestAnimationFrame(dibujar);
         }}
+
+        // Ajustar canvas al redimensionar
+        window.addEventListener('resize', () => {{
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetWidth * (450 / 600);
+            scale = canvas.width / 600;
+            avionX = {posiciones[automata.estado_actual.value][0]} * scale;
+            avionY = {posiciones[automata.estado_actual.value][1]} * scale;
+            objetivoX = avionX;
+            objetivoY = avionY;
+            dibujar();
+        }});
 
         dibujar();
         {'actualizarPosicion("' + st.session_state.estado_objetivo + '", ' + ('true' if not st.session_state.exito else 'false') + ');' if boton_transicion else ''}
     </script>
     """
-    st.components.v1.html(js_code, height=460)
+    st.components.v1.html(js_code, height=400)
 
 # Columna 3: Visualización del DFA
 with col3:
     st.subheader("Autómata Finito Determinista")
-    red = Network(directed=True, height="450px", width="100%", bgcolor="#f0f8ff", font_color="red")
+    red = Network(directed=True, height="400px", width="100%", bgcolor="#f0f8ff", font_color="red")
     red.set_options("""
     {
         "nodes": {
             "shape": "dot",
-            "size": 40,
+            "size": 30,
             "font": {
                 "size": 12,
                 "color": "black",
@@ -273,28 +342,27 @@ with col3:
     }
     """)
 
-    # Posiciones fijas para los nodos del DFA, con EMERGENCIA en el centro
+    # Ajustar posiciones para pantallas más pequeñas
     dfa_posiciones = {
-        "EN_TIERRA": {"x": -200, "y": 150},
-        "DESPEGANDO": {"x": -280, "y": 0},
-        "EN_VUELO": {"x": -60, "y": -220},
-        "ATERRIZANDO": {"x": 100, "y": 0},
-        "EMERGENCIA": {"x": -30, "y": 0},
-        "INICIAL": {"x": -300, "y": 150}  # Nodo auxiliar para la flecha inicial
+        "EN_TIERRA": {"x": -150, "y": 100},
+        "DESPEGANDO": {"x": -200, "y": 0},
+        "EN_VUELO": {"x": -50, "y": -150},
+        "ATERRIZANDO": {"x": 80, "y": 0},
+        "EMERGENCIA": {"x": -20, "y": 0},
+        "INICIAL": {"x": -250, "y": 100}
     }
 
     # Agregar nodos
     for estado in Estado:
         color = "green" if estado == automata.estado_actual else "#97c2fc"
         label = f"<b>{abbreviations[estado.value]}</b>"
-        # Usar borde más grueso para EN_TIERRA para simular doble círculo (estado terminal)
-        border_width = 6 if estado.value == "EN_TIERRA" else 1
+        border_width = 4 if estado.value == "EN_TIERRA" else 1
         red.add_node(
             estado.value,
             label=label,
             title=estado.value.replace('_', ' '),
             color={"background": color, "border": "black"},
-            size=40,
+            size=30,
             shape="dot",
             font={"size": 12, "color": "black", "multi": "html"},
             x=dfa_posiciones[estado.value]["x"],
@@ -303,34 +371,34 @@ with col3:
             borderWidth=border_width
         )
 
-    # Agregar nodo auxiliar para la flecha inicial
+    # Nodo auxiliar para flecha inicial
     red.add_node(
         "INICIAL",
         label="",
         size=10,
         shape="dot",
-        color={"background": "#f0f8ff", "border": "#f0f8ff"},  # Invisible (mismo color que el fondo)
+        color={"background": "#f0f8ff", "border": "#f0f8ff"},
         x=dfa_posiciones["INICIAL"]["x"],
         y=dfa_posiciones["INICIAL"]["y"],
         fixed=True
     )
-    # Flecha desde el nodo auxiliar a EN_TIERRA
     red.add_edge("INICIAL", "EN_TIERRA", color="#2b7ce9", width=2)
 
-    # Agregar aristas de las transiciones
+    # Agregar aristas
     for estado_origen, estados_destino in automata.transiciones.items():
         for estado_destino in estados_destino:
             red.add_edge(estado_origen, estado_destino, color="#2b7ce9", width=2)
 
     red.save_graph("dfa.html")
     with open("dfa.html", "r", encoding="utf-8") as f:
-        st.components.v1.html(f.read(), height=460)
+        st.components.v1.html(f.read(), height=400)
     os.remove("dfa.html")
 
 # Sección de historial de transiciones
 st.subheader("Historial de Transiciones")
-if len(automata.historial) > 1:
-    for i, (estado_origen, estado_destino) in enumerate(automata.historial[1:], 1):
-        st.write(f"{i}. {estado_origen.value if estado_origen else 'Inicio'} → {estado_destino.value}")
-else:
-    st.write("No hay transiciones aún.")
+with st.container():
+    if len(automata.historial) > 1:
+        for i, (estado_origen, estado_destino) in enumerate(automata.historial[1:], 1):
+            st.write(f"{i}. {estado_origen.value if estado_origen else 'Inicio'} → {estado_destino.value}")
+    else:
+        st.write("No hay transiciones aún.")
