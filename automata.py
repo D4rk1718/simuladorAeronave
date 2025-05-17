@@ -53,7 +53,7 @@ class AutomataAeronave:
         estado_siguiente = None
         error_mensaje = None
 
-        # Verificar si el símbolo es válido para el estado actual
+        # Verificar si el símbolo es válido para el estado actu
         if simbolo in self.transiciones.get(self.estado_actual.value, {}):
             estado_siguiente = Estado(self.transiciones[self.estado_actual.value][simbolo])
         else:
