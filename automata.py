@@ -26,44 +26,58 @@ class AutomataAeronave:
     def __init__(self):
         self.estado_actual = Estado.EN_TIERRA
         self.transiciones = {
-            Estado.EN_TIERRA.value: [Estado.DESPEGANDO.value, Estado.EMERGENCIA.value],
-            Estado.DESPEGANDO.value: [Estado.EN_VUELO.value, Estado.EMERGENCIA.value],
-            Estado.EN_VUELO.value: [Estado.ATERRIZANDO.value, Estado.EMERGENCIA.value],
-            Estado.ATERRIZANDO.value: [Estado.EN_TIERRA.value, Estado.EMERGENCIA.value],
-            Estado.EMERGENCIA.value: [Estado.EN_TIERRA.value, Estado.EMERGENCIA.value]  # Añadido EMERGENCIA -> EMERGENCIA
+            Estado.EN_TIERRA.value: {
+                "iniciar_despegue": Estado.DESPEGANDO.value,
+                "emergencia": Estado.EMERGENCIA.value
+            },
+            Estado.DESPEGANDO.value: {
+                "alcanzar_altitud_crucero": Estado.EN_VUELO.value,
+                "emergencia": Estado.EMERGENCIA.value
+            },
+            Estado.EN_VUELO.value: {
+                "iniciar_aterrizaje": Estado.ATERRIZANDO.value,
+                "emergencia": Estado.EMERGENCIA.value
+            },
+            Estado.ATERRIZANDO.value: {
+                "tocar_tierra": Estado.EN_TIERRA.value,
+                "emergencia": Estado.EMERGENCIA.value
+            },
+            Estado.EMERGENCIA.value: {
+                "tocar_tierra": Estado.EN_TIERRA.value,
+                "emergencia": Estado.EMERGENCIA.value
+            }
         }
         self.historial = [(None, Estado.EN_TIERRA)]
 
     def transicionar(self, simbolo):
-        # Definir las transiciones basadas en el alfabeto (0, 1)
-        normal_flow = [
-            ("EN_TIERRA", "DESPEGANDO"),
-            ("DESPEGANDO", "EN_VUELO"),
-            ("EN_VUELO", "ATERRIZANDO"),
-            ("ATERRIZANDO", "EN_TIERRA")
-        ]
         estado_siguiente = None
-        if simbolo == "0":
-            for origen, destino in normal_flow:
-                if origen == self.estado_actual.value and destino in self.transiciones.get(self.estado_actual.value, []):
-                    estado_siguiente = Estado(destino)
-                    break
-            # Transición específica desde EMERGENCIA con 0
-            if self.estado_actual.value == "EMERGENCIA" and "EN_TIERRA" in self.transiciones.get(self.estado_actual.value, []):
-                estado_siguiente = Estado.EN_TIERRA
-        elif simbolo == "1":
-            if "EMERGENCIA" in self.transiciones.get(self.estado_actual.value, []):
-                estado_siguiente = Estado.EMERGENCIA
+        error_mensaje = None
+
+        # Verificar si el símbolo es válido para el estado actual
+        if simbolo in self.transiciones.get(self.estado_actual.value, {}):
+            estado_siguiente = Estado(self.transiciones[self.estado_actual.value][simbolo])
+        else:
+            # Mensajes de error específicos y más descriptivos
+            if self.estado_actual.value == "EN_TIERRA":
+                error_mensaje = f"Error Operacional: No puedes {simbolo.replace('_', ' ')} desde EN_TIERRA. La aeronave debe iniciar el despegue primero. Usa 'iniciar_despegue' o 'emergencia'."
+            elif self.estado_actual.value == "DESPEGANDO":
+                error_mensaje = f"Error Operacional: No puedes {simbolo.replace('_', ' ')} desde DESPEGANDO. La aeronave está en proceso de despegue. Usa 'alcanzar_altitud_crucero' o 'emergencia'."
+            elif self.estado_actual.value == "EN_VUELO":
+                error_mensaje = f"Error Operacional: No puedes {simbolo.replace('_', ' ')} desde EN_VUELO. La aeronave está en altitud de crucero. Usa 'iniciar_aterrizaje' o 'emergencia'."
+            elif self.estado_actual.value == "ATERRIZANDO":
+                error_mensaje = f"Error Operacional: No puedes {simbolo.replace('_', ' ')} desde ATERRIZANDO. La aeronave está descendiendo. Usa 'tocar_tierra' o 'emergencia'."
+            elif self.estado_actual.value == "EMERGENCIA":
+                error_mensaje = f"Error Operacional: No puedes {simbolo.replace('_', ' ')} desde EMERGENCIA. La aeronave está en estado de emergencia. Usa 'tocar_tierra' o 'emergencia' para continuar."
+            else:
+                error_mensaje = f"Error Operacional: Símbolo '{simbolo}' no válido desde el estado {self.estado_actual.value}."
 
         if estado_siguiente:
             self.historial.append((self.estado_actual, estado_siguiente))
             self.estado_actual = estado_siguiente
-            return True, f"Transición exitosa a {self.estado_actual.value} con símbolo {simbolo}"
+            return True, f"Transición exitosa a {self.estado_actual.value} con símbolo {simbolo.replace('_', ' ')}"
         else:
-            mensaje_error = f"Símbolo '{simbolo}' no válido desde el estado {self.estado_actual.value}."
-            print(f"Mensaje de error: {mensaje_error}")
-            return False, mensaje_error
-
+            print(f"Mensaje de error: {error_mensaje}")
+            return False, error_mensaje
 # Configuración de la página de Streamlit
 st.set_page_config(page_title="Simulador de Aeronave", layout="wide")
 
@@ -133,7 +147,7 @@ if 'mensaje' not in st.session_state:
 if 'estado_ultimo' not in st.session_state:
     st.session_state.estado_ultimo = Estado.EN_TIERRA.value
 if 'simbolo_objetivo' not in st.session_state:
-    st.session_state.simbolo_objetivo = "0"
+    st.session_state.simbolo_objetivo = "iniciar_despegue"
 
 # Restaurar el estado del autómata
 automata = st.session_state.automata
@@ -146,7 +160,11 @@ col1, col2, col3 = st.columns([1, 2, 1], gap="medium")
 with col1:
     st.subheader("Control de Estados")
     st.write(f"Estado actual: {automata.estado_actual.value}")
-    simbolo = st.selectbox("Seleccionar símbolo del alfabeto:", ["0", "1"], key="seleccion_simbolo")
+    simbolo = st.selectbox(
+        "Seleccionar símbolo del alfabeto:",
+        ["iniciar_despegue", "alcanzar_altitud_crucero", "iniciar_aterrizaje", "tocar_tierra", "emergencia"],
+        key="seleccion_simbolo"
+    )
     boton_transicion = st.button("Realizar Transición")
     boton_reiniciar = st.button("Reiniciar Simulación")
 
@@ -162,7 +180,7 @@ with col1:
         st.session_state.exito = True
         st.session_state.mensaje = ""
         st.session_state.estado_ultimo = Estado.EN_TIERRA.value
-        st.session_state.simbolo_objetivo = "0"
+        st.session_state.simbolo_objetivo = "iniciar_despegue"
         st.rerun()
 
     if boton_transicion:
@@ -200,7 +218,7 @@ with col2:
             codigo_estados += (
                 "ctx.beginPath();\n"
                 f"ctx.arc({pos_x}, {pos_y}, 20 * scale, 0, 2 * Math.PI);\n"
-                f"ctx.fillStyle = '{estado}' === '{automata.estado_actual.value}' ? 'green' : 'lightgray';\n"
+                f"ctx.fillStyle = '{estado}' === '{st.session_state.estado_actual}' ? 'green' : 'lightgray';\n"
                 "ctx.fill();\n"
                 "ctx.stroke();\n"
                 "ctx.beginPath();\n"
@@ -218,7 +236,7 @@ with col2:
             codigo_estados += (
                 "ctx.beginPath();\n"
                 f"ctx.arc({pos_x}, {pos_y}, 20 * scale, 0, 2 * Math.PI);\n"
-                f"ctx.fillStyle = '{estado}' === '{automata.estado_actual.value}' ? 'green' : 'lightgray';\n"
+                f"ctx.fillStyle = '{estado}' === '{st.session_state.estado_actual}' ? 'green' : 'lightgray';\n"
                 "ctx.fill();\n"
                 "ctx.stroke();\n"
                 "ctx.fillStyle = 'black';\n"
@@ -234,7 +252,7 @@ with col2:
         f"ctx.lineTo(80 * {scale_x}, 400 * {scale_y});\n"
         "ctx.strokeStyle = 'black';\n"
         "ctx.lineWidth = 2 * scale;\n"
-        "ctx.stroke();\n",
+        "ctx.stroke();\n"
         "ctx.beginPath();\n"
         f"ctx.moveTo(80 * {scale_x}, 400 * {scale_y});\n"
         f"ctx.lineTo(75 * {scale_x}, 395 * {scale_y});\n"
@@ -252,8 +270,8 @@ with col2:
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetWidth * (450 / 600);
         const scale = canvas.width / 600;
-        let avionX = {posiciones[automata.estado_actual.value][0]} * scale;
-        let avionY = {posiciones[automata.estado_actual.value][1]} * scale;
+        let avionX = {posiciones[st.session_state.estado_actual][0]} * scale;
+        let avionY = {posiciones[st.session_state.estado_actual][1]} * scale;
         let objetivoX = avionX;
         let objetivoY = avionY;
         let error = false;
@@ -310,8 +328,8 @@ with col2:
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetWidth * (450 / 600);
             scale = canvas.width / 600;
-            avionX = {posiciones[automata.estado_actual.value][0]} * scale;
-            avionY = {posiciones[automata.estado_actual.value][1]} * scale;
+            avionX = {posiciones[st.session_state.estado_actual][0]} * scale;
+            avionY = {posiciones[st.session_state.estado_actual][1]} * scale;
             objetivoX = avionX;
             objetivoY = avionY;
             dibujar();
@@ -322,6 +340,7 @@ with col2:
     </script>
     """
     st.components.v1.html(js_code, height=400)
+
 # Columna 3: Visualización del DFA
 with col3:
     st.subheader("Autómata Finito Determinista")
@@ -380,7 +399,6 @@ with col3:
 
     # Add nodes
     for estado in Estado:
-        # Usar st.session_state.estado_actual para asegurar sincronización
         color = "green" if estado.value == st.session_state.estado_actual else "#97c2fc"
         label = f"<b>{abbreviations[estado.value]}</b>"
         border_width = 4 if estado.value == "EN_TIERRA" else 1
@@ -411,46 +429,23 @@ with col3:
     )
     red.add_edge("INICIAL", "EN_TIERRA", color="#2b7ce9", width=2, label="")
 
-    # Define normal flow transitions (labeled with "0")
-    normal_flow = [
-        ("EN_TIERRA", "DESPEGANDO"),
-        ("DESPEGANDO", "EN_VUELO"),
-        ("EN_VUELO", "ATERRIZANDO"),
-        ("ATERRIZANDO", "EN_TIERRA")
-    ]
-
-    # Add edges for normal flow (symbol "0")
-    for origen, destino in normal_flow:
-        if destino in automata.transiciones.get(origen, []):
-            red.add_edge(
-                origen,
-                destino,
-                color="#2b7ce9",
-                width=2,
-                label="0",
-                font={"size": 10, "color": "black", "align": "middle"}
-            )
-
-    # Add edge for EMERGENCIA to EN_TIERRA (symbol "0")
-    if "EN_TIERRA" in automata.transiciones.get("EMERGENCIA", []):
-        red.add_edge(
-            "EMERGENCIA",
-            "EN_TIERRA",
-            color="#2b7ce9",
-            width=2,
-            label="0",
-            font={"size": 10, "color": "black", "align": "middle"}
-        )
-
-    # Add edges for emergency transitions (symbol "1")
-    for estado_origen in automata.transiciones:
-        if "EMERGENCIA" in automata.transiciones[estado_origen]:
+    # Add edges based on transitions
+    for estado_origen, transiciones in automata.transiciones.items():
+        for simbolo, estado_destino in transiciones.items():
+            # Abreviar etiquetas para mejor visualización
+            simbolo_abbr = {
+                "iniciar_despegue": "ID",
+                "alcanzar_altitud_crucero": "AAC",
+                "iniciar_aterrizaje": "IA",
+                "tocar_tierra": "TT",
+                "emergencia": "E"
+            }.get(simbolo, simbolo)
             red.add_edge(
                 estado_origen,
-                "EMERGENCIA",
+                estado_destino,
                 color="#2b7ce9",
                 width=2,
-                label="1",
+                label=simbolo_abbr,
                 font={"size": 10, "color": "black", "align": "middle"}
             )
 
