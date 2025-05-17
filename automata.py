@@ -30,17 +30,37 @@ class AutomataAeronave:
             Estado.DESPEGANDO.value: [Estado.EN_VUELO.value, Estado.EMERGENCIA.value],
             Estado.EN_VUELO.value: [Estado.ATERRIZANDO.value, Estado.EMERGENCIA.value],
             Estado.ATERRIZANDO.value: [Estado.EN_TIERRA.value, Estado.EMERGENCIA.value],
-            Estado.EMERGENCIA.value: [Estado.EN_TIERRA.value]
+            Estado.EMERGENCIA.value: [Estado.EN_TIERRA.value, Estado.EMERGENCIA.value]  # Añadido EMERGENCIA -> EMERGENCIA
         }
         self.historial = [(None, Estado.EN_TIERRA)]
 
-    def transicionar(self, estado_siguiente):
-        if estado_siguiente.value in self.transiciones.get(self.estado_actual.value, []):
+    def transicionar(self, simbolo):
+        # Definir las transiciones basadas en el alfabeto (0, 1)
+        normal_flow = [
+            ("EN_TIERRA", "DESPEGANDO"),
+            ("DESPEGANDO", "EN_VUELO"),
+            ("EN_VUELO", "ATERRIZANDO"),
+            ("ATERRIZANDO", "EN_TIERRA")
+        ]
+        estado_siguiente = None
+        if simbolo == "0":
+            for origen, destino in normal_flow:
+                if origen == self.estado_actual.value and destino in self.transiciones.get(self.estado_actual.value, []):
+                    estado_siguiente = Estado(destino)
+                    break
+            # Transición específica desde EMERGENCIA con 0
+            if self.estado_actual.value == "EMERGENCIA" and "EN_TIERRA" in self.transiciones.get(self.estado_actual.value, []):
+                estado_siguiente = Estado.EN_TIERRA
+        elif simbolo == "1":
+            if "EMERGENCIA" in self.transiciones.get(self.estado_actual.value, []):
+                estado_siguiente = Estado.EMERGENCIA
+
+        if estado_siguiente:
             self.historial.append((self.estado_actual, estado_siguiente))
             self.estado_actual = estado_siguiente
-            return True, f"Transición exitosa a {self.estado_actual.value}"
+            return True, f"Transición exitosa a {self.estado_actual.value} con símbolo {simbolo}"
         else:
-            mensaje_error = f"Transición inválida desde el estado {self.estado_actual.value} no se puede ir al estado  {estado_siguiente.value}."
+            mensaje_error = f"Símbolo '{simbolo}' no válido desde el estado {self.estado_actual.value}."
             print(f"Mensaje de error: {mensaje_error}")
             return False, mensaje_error
 
@@ -112,8 +132,8 @@ if 'mensaje' not in st.session_state:
     st.session_state.mensaje = ""
 if 'estado_ultimo' not in st.session_state:
     st.session_state.estado_ultimo = Estado.EN_TIERRA.value
-if 'estado_objetivo' not in st.session_state:
-    st.session_state.estado_objetivo = Estado.EN_TIERRA.value
+if 'simbolo_objetivo' not in st.session_state:
+    st.session_state.simbolo_objetivo = "0"
 
 # Restaurar el estado del autómata
 automata = st.session_state.automata
@@ -126,7 +146,7 @@ col1, col2, col3 = st.columns([1, 2, 1], gap="medium")
 with col1:
     st.subheader("Control de Estados")
     st.write(f"Estado actual: {automata.estado_actual.value}")
-    estado_siguiente = st.selectbox("Seleccionar siguiente estado:", [s.value for s in Estado], key="seleccion_estado")
+    simbolo = st.selectbox("Seleccionar símbolo del alfabeto:", ["0", "1"], key="seleccion_simbolo")
     boton_transicion = st.button("Realizar Transición")
     boton_reiniciar = st.button("Reiniciar Simulación")
 
@@ -142,20 +162,20 @@ with col1:
         st.session_state.exito = True
         st.session_state.mensaje = ""
         st.session_state.estado_ultimo = Estado.EN_TIERRA.value
-        st.session_state.estado_objetivo = Estado.EN_TIERRA.value
+        st.session_state.simbolo_objetivo = "0"
         st.rerun()
 
     if boton_transicion:
-        exito, mensaje = automata.transicionar(Estado[estado_siguiente])
+        exito, mensaje = automata.transicionar(simbolo)
         st.session_state.exito = exito
         st.session_state.mensaje = mensaje
         if exito:
             st.session_state.estado_actual = automata.estado_actual.value
             st.session_state.estado_ultimo = automata.estado_actual.value
-            st.session_state.estado_objetivo = estado_siguiente
+            st.session_state.simbolo_objetivo = simbolo
             st.success(mensaje)
         else:
-            st.session_state.estado_objetivo = estado_siguiente
+            st.session_state.simbolo_objetivo = simbolo
             st.error(mensaje)
 
 # Columna 2: Simulación visual
@@ -214,7 +234,7 @@ with col2:
         f"ctx.lineTo(80 * {scale_x}, 400 * {scale_y});\n"
         "ctx.strokeStyle = 'black';\n"
         "ctx.lineWidth = 2 * scale;\n"
-        "ctx.stroke();\n"
+        "ctx.stroke();\n",
         "ctx.beginPath();\n"
         f"ctx.moveTo(80 * {scale_x}, 400 * {scale_y});\n"
         f"ctx.lineTo(75 * {scale_x}, 395 * {scale_y});\n"
@@ -274,11 +294,11 @@ with col2:
         function actualizarPosicion(estadoObjetivo, hayError) {{
             if (hayError) {{
                 error = true;
-                errorX = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[0]} * scale;
-                errorY = {posiciones.get(st.session_state.estado_objetivo, [0, 0])[1]} * scale;
+                errorX = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[0]} * scale;
+                errorY = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[1]} * scale;
                 setTimeout(() => {{ error = false; dibujar(); }}, 1000);
             }} else {{
-                HAVError = false;
+                error = false;
                 objetivoX = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[0]} * scale;
                 objetivoY = {posiciones.get(st.session_state.estado_ultimo, [0, 0])[1]} * scale;
             }}
@@ -298,15 +318,14 @@ with col2:
         }});
 
         dibujar();
-        {'actualizarPosicion("' + st.session_state.estado_objetivo + '", ' + ('true' if not st.session_state.exito else 'false') + ');' if boton_transicion else ''}
+        {'actualizarPosicion("' + st.session_state.estado_ultimo + '", ' + ('true' if not st.session_state.exito else 'false') + ');' if boton_transicion else ''}
     </script>
     """
     st.components.v1.html(js_code, height=400)
-
 # Columna 3: Visualización del DFA
 with col3:
     st.subheader("Autómata Finito Determinista")
-    red = Network(directed=True, height="400px", width="100%", bgcolor="#f0f8ff", font_color="red")
+    red = Network(directed=True, height="400px", width="100%", bgcolor="#f0f8ff", font_color="black")
     red.set_options("""
     {
         "nodes": {
@@ -315,7 +334,8 @@ with col3:
             "font": {
                 "size": 12,
                 "color": "black",
-                "multi": "html"
+                "multi": "html",
+                "align": "center"
             }
         },
         "edges": {
@@ -330,7 +350,13 @@ with col3:
                 }
             },
             "smooth": {
-                "type": "continuous"
+                "type": "curvedCW",
+                "roundness": 0.2
+            },
+            "font": {
+                "size": 10,
+                "color": "black",
+                "align": "middle"
             }
         },
         "physics": {
@@ -342,7 +368,7 @@ with col3:
     }
     """)
 
-    # Ajustar posiciones para pantallas más pequeñas
+    # Positions for nodes
     dfa_posiciones = {
         "EN_TIERRA": {"x": -150, "y": 100},
         "DESPEGANDO": {"x": -200, "y": 0},
@@ -352,9 +378,10 @@ with col3:
         "INICIAL": {"x": -250, "y": 100}
     }
 
-    # Agregar nodos
+    # Add nodes
     for estado in Estado:
-        color = "green" if estado == automata.estado_actual else "#97c2fc"
+        # Usar st.session_state.estado_actual para asegurar sincronización
+        color = "green" if estado.value == st.session_state.estado_actual else "#97c2fc"
         label = f"<b>{abbreviations[estado.value]}</b>"
         border_width = 4 if estado.value == "EN_TIERRA" else 1
         red.add_node(
@@ -364,14 +391,14 @@ with col3:
             color={"background": color, "border": "black"},
             size=30,
             shape="dot",
-            font={"size": 12, "color": "black", "multi": "html"},
+            font={"size": 12, "color": "black", "multi": "html", "align": "center"},
             x=dfa_posiciones[estado.value]["x"],
             y=dfa_posiciones[estado.value]["y"],
             fixed=True,
             borderWidth=border_width
         )
 
-    # Nodo auxiliar para flecha inicial
+    # Add auxiliary initial node
     red.add_node(
         "INICIAL",
         label="",
@@ -382,19 +409,57 @@ with col3:
         y=dfa_posiciones["INICIAL"]["y"],
         fixed=True
     )
-    red.add_edge("INICIAL", "EN_TIERRA", color="#2b7ce9", width=2)
+    red.add_edge("INICIAL", "EN_TIERRA", color="#2b7ce9", width=2, label="")
 
-    # Agregar aristas
-    for estado_origen, estados_destino in automata.transiciones.items():
-        for estado_destino in estados_destino:
-            red.add_edge(estado_origen, estado_destino, color="#2b7ce9", width=2)
+    # Define normal flow transitions (labeled with "0")
+    normal_flow = [
+        ("EN_TIERRA", "DESPEGANDO"),
+        ("DESPEGANDO", "EN_VUELO"),
+        ("EN_VUELO", "ATERRIZANDO"),
+        ("ATERRIZANDO", "EN_TIERRA")
+    ]
+
+    # Add edges for normal flow (symbol "0")
+    for origen, destino in normal_flow:
+        if destino in automata.transiciones.get(origen, []):
+            red.add_edge(
+                origen,
+                destino,
+                color="#2b7ce9",
+                width=2,
+                label="0",
+                font={"size": 10, "color": "black", "align": "middle"}
+            )
+
+    # Add edge for EMERGENCIA to EN_TIERRA (symbol "0")
+    if "EN_TIERRA" in automata.transiciones.get("EMERGENCIA", []):
+        red.add_edge(
+            "EMERGENCIA",
+            "EN_TIERRA",
+            color="#2b7ce9",
+            width=2,
+            label="0",
+            font={"size": 10, "color": "black", "align": "middle"}
+        )
+
+    # Add edges for emergency transitions (symbol "1")
+    for estado_origen in automata.transiciones:
+        if "EMERGENCIA" in automata.transiciones[estado_origen]:
+            red.add_edge(
+                estado_origen,
+                "EMERGENCIA",
+                color="#2b7ce9",
+                width=2,
+                label="1",
+                font={"size": 10, "color": "black", "align": "middle"}
+            )
 
     red.save_graph("dfa.html")
     with open("dfa.html", "r", encoding="utf-8") as f:
         st.components.v1.html(f.read(), height=400)
     os.remove("dfa.html")
 
-# Sección de historial de transiciones
+# Transition history section
 st.subheader("Historial de Transiciones")
 with st.container():
     if len(automata.historial) > 1:
